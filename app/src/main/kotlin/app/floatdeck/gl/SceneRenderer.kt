@@ -84,8 +84,17 @@ class SceneRenderer {
 
     val isEmpty: Boolean get() = layers.isEmpty() && emitters.isEmpty()
 
-    /** Largest parallax depth among layers; the wallpaper overscan must cover it so no edge is exposed. */
-    val maxDepth: Float get() = layers.maxOfOrNull { it.config.depth }?.coerceAtLeast(1f) ?: 1f
+    /**
+     * Largest parallax depth among layers that must keep covering the screen edges (the
+     * wallpaper itself counts as depth 1 unless an opaque base replaces it). Contained layers
+     * fade out before their edges, so they are left out and never force a zoom-in.
+     */
+    val edgeDepth: Float
+        get() {
+            val wallpaperDepth = if (hasOpaqueBase) 0f else 1f
+            val layerDepth = layers.filter { !it.config.contained }.maxOfOrNull { it.config.depth } ?: 0f
+            return maxOf(wallpaperDepth, layerDepth)
+        }
 
     /**
      * Loads layer and particle textures. [loadTexture] returns (textureId, width, height) or null.

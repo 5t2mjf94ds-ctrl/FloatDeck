@@ -100,6 +100,14 @@ android {
     }
 
     signingConfigs {
+        // Fixed debug key (committed on purpose) so every CI build of this fork can update
+        // the installed app in place instead of failing with a signature mismatch.
+        getByName("debug") {
+            storeFile = file("layers-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             val ksFile = System.getenv("KEYSTORE_FILE")
             if (ksFile != null) {

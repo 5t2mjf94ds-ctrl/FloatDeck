@@ -92,6 +92,13 @@ class FloatDeckRenderer(
     var smoothedRollX = 0f
     var smoothedPitchY = 0f
 
+    // Rest pose for layered templates that recenter: tilt is measured from here
+    private var restRollX = 0f
+    private var restPitchY = 0f
+    private var restInitialized = false
+    private var recenterSeconds = 0f
+    private var sceneParallaxScale = 1f
+
     // ------------------------------------------------------------------
     // 锁屏/解锁过渡
     // ------------------------------------------------------------------
@@ -352,6 +359,9 @@ class FloatDeckRenderer(
         scene.load(template.layers, template.emitters) { path, isRemote ->
             if (isRemote) loadTextureFromPath(path) else loadFullResTexture(path)
         }
+        recenterSeconds = template.scene.recenterSeconds
+        sceneParallaxScale = template.scene.parallaxScale
+        restInitialized = false
     }
 
     private fun loadTextureFromPath(path: String): Triple<Int, Int, Int>? {
@@ -411,6 +421,7 @@ class FloatDeckRenderer(
 
         swayTimeSeconds += frameDeltaSeconds
         updateInertia()
+        updateRestPose()
         scene.update(frameDeltaSeconds, wallpaperPixelWidth.toFloat(), wallpaperPixelHeight.toFloat())
 
         // 横竖屏切换时重新加载模板
@@ -423,6 +434,24 @@ class FloatDeckRenderer(
         drawBackgroundLayers()
         drawPortraits()
     }
+
+    /** Lets the rest pose follow the device slowly so a held tilt settles back to center. */
+    private fun updateRestPose() {
+        if (recenterSeconds <= 0f) return
+        if (!restInitialized) {
+            restRollX = smoothedRollX
+            restPitchY = smoothedPitchY
+            restInitialized = true
+            return
+        }
+        val k = 1f - exp(-frameDeltaSeconds / recenterSeconds)
+        restRollX += (smoothedRollX - restRollX) * k
+        restPitchY += (smoothedPitchY - restPitchY) * k
+    }
+
+    private fun tiltPitch(): Float = if (recenterSeconds > 0f) smoothedPitchY - restPitchY else smoothedPitchY
+
+    private fun tiltRoll(): Float = if (recenterSeconds > 0f) smoothedRollX - restRollX else smoothedRollX
 
     /** Computes the frame delta (s) from the previous frame; clamped to avoid jumps after long stalls. */
     internal fun updateFrameDelta() {
@@ -490,13 +519,13 @@ class FloatDeckRenderer(
         // roll (tilting left/right) → vertical shift
         val offsets =
             parallaxOffsets(
-                smoothedPitchY,
-                smoothedRollX,
+                tiltPitch(),
+                tiltRoll(),
                 screenWidthPixels,
                 screenHeightPixels,
                 BACKGROUND_PARALLAX_X,
                 BACKGROUND_PARALLAX_Y,
-                parallaxSensitivity,
+                parallaxSensitivity * sceneParallaxScale,
             )
         drawSingleBackgroundLayer(offsets[0], offsets[1], 1.0f)
     }
@@ -528,7 +557,7 @@ class FloatDeckRenderer(
                 sceneOverscan(
                     parallaxX,
                     parallaxY,
-                    scene.maxDepth,
+                    scene.edgeDepth,
                     screenWidthPixels,
                     screenHeightPixels,
                     textureAspect,
@@ -644,8 +673,8 @@ class FloatDeckRenderer(
             // Subtle parallax offsets; portraits shift more than the background
             val portraitParallax =
                 parallaxOffsets(
-                    smoothedPitchY,
-                    smoothedRollX,
+                    tiltPitch(),
+                    tiltRoll(),
                     screenWidthPixels,
                     screenHeightPixels,
                     PORTRAIT_PARALLAX_X,

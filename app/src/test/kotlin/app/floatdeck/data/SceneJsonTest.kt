@@ -81,6 +81,30 @@ class SceneJsonTest {
     }
 
     @Test
+    fun `scene settings and contained flag`() {
+        val json =
+            JSONObject(
+                """
+                {"scene":{"recenter":2.5,"parallax":1.4},
+                 "layers":[{"file":"johnny.webp","depth":1.3,"contained":true},{"file":"base.webp"}]}
+                """.trimIndent(),
+            )
+        val settings = SceneJson.parseSettings(json)
+        assertEquals(2.5f, settings.recenterSeconds, 0.0001f)
+        assertEquals(1.4f, settings.parallaxScale, 0.0001f)
+        val layers = SceneJson.parseLayers(json)
+        assertTrue(layers[0].contained)
+        assertFalse(layers[1].contained)
+    }
+
+    @Test
+    fun `missing scene settings keep absolute tilt`() {
+        val settings = SceneJson.parseSettings(JSONObject("{}"))
+        assertEquals(0f, settings.recenterSeconds, 0.0001f)
+        assertEquals(1f, settings.parallaxScale, 0.0001f)
+    }
+
+    @Test
     fun `safe file names`() {
         assertTrue(SceneJson.isSafeFileName("gyro_ride-2.webp"))
         assertFalse(SceneJson.isSafeFileName("../a.webp"))

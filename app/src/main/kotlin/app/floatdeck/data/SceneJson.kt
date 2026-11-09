@@ -17,6 +17,15 @@ object SceneJson {
     /** Only plain file names inside the template folder are accepted (no separators, no ".."). */
     internal fun isSafeFileName(name: String): Boolean = name.matches(SAFE_FILE_NAME) && !name.contains("..")
 
+    /** Optional top-level "scene": {"recenter": seconds, "parallax": multiplier}. */
+    fun parseSettings(json: JSONObject): SceneSettings {
+        val obj = json.optJSONObject("scene") ?: return SceneSettings()
+        return SceneSettings(
+            recenterSeconds = obj.optFloat("recenter", 0f).coerceIn(0f, 60f),
+            parallaxScale = obj.optFloat("parallax", 1f).coerceIn(0f, 4f),
+        )
+    }
+
     fun parseLayers(json: JSONObject): List<SceneLayerConfig> {
         val arr = json.optJSONArray("layers") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
@@ -72,6 +81,7 @@ object SceneJson {
             pulsePeriod = (pulse?.optFloat("period", 8f) ?: 8f).coerceAtLeast(0.1f),
             additive = obj.optBoolean("additive", false),
             opaque = obj.optBoolean("opaque", false),
+            contained = obj.optBoolean("contained", false),
         )
     }
 

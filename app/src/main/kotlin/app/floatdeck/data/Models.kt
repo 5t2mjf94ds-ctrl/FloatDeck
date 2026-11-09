@@ -54,6 +54,7 @@ data class TemplateConfig(
     val effect: PortraitEffect = PortraitEffect.NONE,
     val layers: List<SceneLayerConfig> = emptyList(),
     val emitters: List<ParticleEmitterConfig> = emptyList(),
+    val scene: SceneSettings = SceneSettings(),
 )
 
 /**
@@ -80,6 +81,8 @@ data class LayerSway(
  * @param driftY vertical texture scroll in layer heights per second (wraps; texture must tile)
  * @param pulseAmount 0..1 opacity breathing depth; [pulsePeriod] in seconds
  * @param opaque the layer fully covers the wallpaper, so the wallpaper itself is not drawn
+ * @param contained the layer's content fades out before its edges, so it never has to cover
+ *   the screen and does not force the wallpaper to zoom in when it moves
  */
 data class SceneLayerConfig(
     val id: String,
@@ -95,6 +98,20 @@ data class SceneLayerConfig(
     val pulsePeriod: Float = 8f,
     val additive: Boolean = false,
     val opaque: Boolean = false,
+    val contained: Boolean = false,
+)
+
+/**
+ * Template-wide motion settings for layered templates.
+ *
+ * @param recenterSeconds when > 0, tilt is measured relative to a slowly following rest
+ *   pose (time constant in seconds), so the scene settles back to center whenever the
+ *   device is held still at any angle; 0 keeps the absolute-tilt behavior
+ * @param parallaxScale multiplier on top of the user's tilt-parallax setting
+ */
+data class SceneSettings(
+    val recenterSeconds: Float = 0f,
+    val parallaxScale: Float = 1f,
 )
 
 /**

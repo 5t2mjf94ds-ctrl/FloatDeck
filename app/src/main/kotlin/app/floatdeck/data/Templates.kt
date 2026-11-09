@@ -27,6 +27,7 @@ data class TemplateDef(
     val backgroundZoom: Float = 1f,
     val layers: List<SceneLayerConfig> = emptyList(),
     val emitters: List<ParticleEmitterConfig> = emptyList(),
+    val scene: SceneSettings = SceneSettings(),
 )
 
 /**
@@ -68,6 +69,7 @@ object Templates {
                 backgroundZoom = parseBackgroundZoom(json),
                 layers = SceneJson.parseLayers(json),
                 emitters = SceneJson.parseEmitters(json),
+                scene = SceneJson.parseSettings(json),
             )
         } catch (_: Exception) {
             null
@@ -110,6 +112,7 @@ object Templates {
                 backgroundZoom = parseBackgroundZoom(json),
                 layers = SceneJson.parseLayers(json),
                 emitters = SceneJson.parseEmitters(json),
+                scene = SceneJson.parseSettings(json),
             )
         } catch (_: Exception) {
             null
@@ -214,6 +217,7 @@ object Templates {
             portraits = portraits,
             layers = def.layers.map { it.copy(path = "$TEMPLATES_DIR/${def.id}/${it.path}", isRemote = false) },
             emitters = def.emitters.map { it.copy(path = "$TEMPLATES_DIR/${def.id}/${it.path}", isRemote = false) },
+            scene = def.scene,
         )
     }
 
@@ -253,6 +257,7 @@ object Templates {
             isRemote = true,
             layers = def.layers.map { it.copy(path = File(templateDir, it.path).absolutePath, isRemote = true) },
             emitters = def.emitters.map { it.copy(path = File(templateDir, it.path).absolutePath, isRemote = true) },
+            scene = def.scene,
         )
     }
 
