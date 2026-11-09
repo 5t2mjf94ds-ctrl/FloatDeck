@@ -39,6 +39,7 @@ data class SpriteProgram(
     val texture: Int,
     val alpha: Int,
     val uvOffset: Int,
+    val uvScale: Int,
 )
 
 /**
@@ -161,6 +162,7 @@ class SceneRenderer {
         emitters.forEachIndexed { i, e -> if (!drawn[i]) drawEmitter(e, frame, sprite, ortho) }
 
         GLES30.glUniform2f(sprite.uvOffset, 0f, 0f)
+        GLES30.glUniform2f(sprite.uvScale, 1f, 1f)
         GLES30.glBlendFunc(GLES30.GL_ONE, GLES30.GL_ONE_MINUS_SRC_ALPHA)
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
@@ -184,7 +186,14 @@ class SceneRenderer {
         }
         if (alpha <= 0.001f) return
 
-        val (swayX, swayY) = swayOffset(cfg, frame.swayScale)
+        var (swayX, swayY) = swayOffset(cfg, frame.swayScale)
+        cfg.follow?.let { parentId ->
+            layers.firstOrNull { it.config.id == parentId }?.let { parent ->
+                val (px, py) = swayOffset(parent.config, frame.swayScale)
+                swayX += px
+                swayY += py
+            }
+        }
         val left = frame.centerX - frame.drawWidth / 2f + frame.parallaxX * cfg.depth + swayX * frame.drawWidth
         val top = frame.centerY - frame.drawHeight / 2f + frame.parallaxY * cfg.depth + swayY * frame.drawHeight
         val r = cfg.rect
@@ -195,15 +204,30 @@ class SceneRenderer {
 
         Matrix.setIdentityM(model, 0)
         Matrix.translateM(model, 0, cx, cy, 0f)
+        if (cfg.spinDegPerSec != 0f) {
+            val angle = ((cfg.spinDegPerSec * timeSeconds) % 360.0).toFloat()
+            Matrix.rotateM(model, 0, angle, 0f, 0f, 1f)
+        }
         Matrix.scaleM(model, 0, halfW, halfH, 1f)
         Matrix.multiplyMM(mvp, 0, ortho, 0, model, 0)
 
-        val u = wrapOffset(-cfg.driftX * timeSeconds)
-        val v = wrapOffset(-cfg.driftY * timeSeconds)
         setBlend(cfg.additive)
         GLES30.glUniformMatrix4fv(sprite.mvp, 1, false, mvp, 0)
         GLES30.glUniform1f(sprite.alpha, alpha)
-        GLES30.glUniform2f(sprite.uvOffset, u, v)
+        if (cfg.frameCount > 1 && cfg.frameFps > 0f) {
+            val index = frameIndex(timeSeconds, cfg.frameFps, cfg.frameCount)
+            val col = index % cfg.frameCols
+            val row = index / cfg.frameCols
+            GLES30.glUniform2f(sprite.uvScale, 1f / cfg.frameCols, 1f / cfg.frameRows)
+            GLES30.glUniform2f(sprite.uvOffset, col.toFloat() / cfg.frameCols, row.toFloat() / cfg.frameRows)
+        } else {
+            GLES30.glUniform2f(sprite.uvScale, 1f, 1f)
+            GLES30.glUniform2f(
+                sprite.uvOffset,
+                wrapOffset(-cfg.driftX * timeSeconds),
+                wrapOffset(-cfg.driftY * timeSeconds),
+            )
+        }
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, layer.textureId)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
     }
@@ -325,6 +349,7 @@ class SceneRenderer {
 
         setBlend(c.additive)
         GLES30.glUniform2f(sprite.uvOffset, 0f, 0f)
+        GLES30.glUniform2f(sprite.uvScale, 1f, 1f)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, e.textureId)
         for (i in 0 until e.count) {
             val t = e.age[i] / e.life[i]
@@ -386,6 +411,17 @@ class SceneRenderer {
         internal fun wrapOffset(value: Double): Float {
             val f = value - floor(value)
             return f.toFloat()
+        }
+
+        /** Sprite-sheet frame to show at [time] seconds; loops over [count] frames at [fps]. */
+        internal fun frameIndex(
+            time: Double,
+            fps: Float,
+            count: Int,
+        ): Int {
+            if (count <= 1 || fps <= 0f) return 0
+            val i = floor(time * fps).toLong() % count
+            return (if (i < 0) i + count else i).toInt()
         }
     }
 }

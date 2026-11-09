@@ -83,6 +83,10 @@ data class LayerSway(
  * @param opaque the layer fully covers the wallpaper, so the wallpaper itself is not drawn
  * @param contained the layer's content fades out before its edges, so it never has to cover
  *   the screen and does not force the wallpaper to zoom in when it moves
+ * @param follow id of a parent layer whose idle sway is added to this layer's own
+ * @param spinDegPerSec continuous rotation around the layer's center (clockwise on screen)
+ * @param frameCount number of animation frames in a sprite-sheet texture laid out as
+ *   [frameCols] × [frameRows], left-to-right then top-to-bottom, played at [frameFps]
  */
 data class SceneLayerConfig(
     val id: String,
@@ -99,6 +103,12 @@ data class SceneLayerConfig(
     val additive: Boolean = false,
     val opaque: Boolean = false,
     val contained: Boolean = false,
+    val follow: String? = null,
+    val spinDegPerSec: Float = 0f,
+    val frameCols: Int = 1,
+    val frameRows: Int = 1,
+    val frameCount: Int = 1,
+    val frameFps: Float = 0f,
 )
 
 /**

@@ -67,6 +67,9 @@ object SceneJson {
             }
         val drift = obj.optJSONObject("drift")
         val pulse = obj.optJSONObject("pulse")
+        val frames = obj.optJSONObject("frames")
+        val cols = (frames?.optInt("cols", 1) ?: 1).coerceIn(1, 64)
+        val rows = (frames?.optInt("rows", 1) ?: 1).coerceIn(1, 64)
         return SceneLayerConfig(
             id = obj.optString("id", "layer$index"),
             path = file,
@@ -82,6 +85,12 @@ object SceneJson {
             additive = obj.optBoolean("additive", false),
             opaque = obj.optBoolean("opaque", false),
             contained = obj.optBoolean("contained", false),
+            follow = obj.optString("follow", "").ifBlank { null },
+            spinDegPerSec = obj.optFloat("spin", 0f).coerceIn(-7200f, 7200f),
+            frameCols = cols,
+            frameRows = rows,
+            frameCount = (frames?.optInt("count", cols * rows) ?: 1).coerceIn(1, cols * rows),
+            frameFps = (frames?.optFloat("fps", 0f) ?: 0f).coerceIn(0f, 120f),
         )
     }
 

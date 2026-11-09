@@ -105,6 +105,30 @@ class SceneJsonTest {
     }
 
     @Test
+    fun `animation fields parse`() {
+        val json =
+            JSONObject(
+                """
+                {"layers":[{"id":"ball","file":"ball.webp","follow":"gyro","spin":540,
+                  "frames":{"cols":8,"rows":4,"count":32,"fps":36}},
+                 {"file":"plain.webp"}]}
+                """.trimIndent(),
+            )
+        val layers = SceneJson.parseLayers(json)
+        val ball = layers[0]
+        assertEquals("gyro", ball.follow)
+        assertEquals(540f, ball.spinDegPerSec, 0.0001f)
+        assertEquals(8, ball.frameCols)
+        assertEquals(4, ball.frameRows)
+        assertEquals(32, ball.frameCount)
+        assertEquals(36f, ball.frameFps, 0.0001f)
+        val plain = layers[1]
+        assertNull(plain.follow)
+        assertEquals(1, plain.frameCount)
+        assertEquals(0f, plain.frameFps, 0.0001f)
+    }
+
+    @Test
     fun `safe file names`() {
         assertTrue(SceneJson.isSafeFileName("gyro_ride-2.webp"))
         assertFalse(SceneJson.isSafeFileName("../a.webp"))

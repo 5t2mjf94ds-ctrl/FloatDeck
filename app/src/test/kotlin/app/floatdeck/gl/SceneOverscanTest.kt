@@ -37,6 +37,15 @@ class SceneOverscanTest {
     }
 
     @Test
+    fun `sprite frames loop`() {
+        assertEquals(0, SceneRenderer.frameIndex(0.0, 36f, 32))
+        assertEquals(1, SceneRenderer.frameIndex(1.0 / 36 + 1e-6, 36f, 32))
+        assertEquals(0, SceneRenderer.frameIndex(32.0 / 36 + 1e-6, 36f, 32))
+        assertEquals(0, SceneRenderer.frameIndex(5.0, 0f, 32))
+        assertEquals(0, SceneRenderer.frameIndex(5.0, 36f, 1))
+    }
+
+    @Test
     fun `scroll offset wraps into unit range`() {
         assertEquals(0.25f, SceneRenderer.wrapOffset(-0.75), 0.0001f)
         assertEquals(0.5f, SceneRenderer.wrapOffset(12.5), 0.0001f)

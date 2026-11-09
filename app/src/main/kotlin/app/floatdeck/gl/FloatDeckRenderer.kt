@@ -165,6 +165,7 @@ class FloatDeckRenderer(
     private var uniformBackgroundTexture = 0
     private var uniformBackgroundAlpha = 0
     private var uniformBackgroundUvOffset = 0
+    private var uniformBackgroundUvScale = 0
 
     // ------------------------------------------------------------------
     // Scene layers (cut-out depth layers, drifting fog) and particles
@@ -262,6 +263,7 @@ class FloatDeckRenderer(
         uniformBackgroundTexture = GLES30.glGetUniformLocation(backgroundProgram, "uTexture")
         uniformBackgroundAlpha = GLES30.glGetUniformLocation(backgroundProgram, "uAlpha")
         uniformBackgroundUvOffset = GLES30.glGetUniformLocation(backgroundProgram, "uUVOffset")
+        uniformBackgroundUvScale = GLES30.glGetUniformLocation(backgroundProgram, "uUVScale")
         spriteProgram =
             SpriteProgram(
                 program = backgroundProgram,
@@ -269,6 +271,7 @@ class FloatDeckRenderer(
                 texture = uniformBackgroundTexture,
                 alpha = uniformBackgroundAlpha,
                 uvOffset = uniformBackgroundUvOffset,
+                uvScale = uniformBackgroundUvScale,
             )
 
         quadVertexBuffer = Quad.createBuffer()
@@ -592,6 +595,7 @@ class FloatDeckRenderer(
         GLES30.glUniformMatrix4fv(uniformBackgroundMvp, 1, false, mvp, 0)
         GLES30.glUniform2f(uniformBackgroundParallax, 0f, 0f)
         GLES30.glUniform2f(uniformBackgroundUvOffset, 0f, 0f)
+        GLES30.glUniform2f(uniformBackgroundUvScale, 1f, 1f)
         if (uniformBackgroundAlpha != 0) {
             GLES30.glUniform1f(uniformBackgroundAlpha, alpha)
         }
