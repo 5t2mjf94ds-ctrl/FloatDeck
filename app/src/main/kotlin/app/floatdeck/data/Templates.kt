@@ -25,6 +25,8 @@ data class TemplateDef(
     val left: List<TemplateFile>,
     val right: List<TemplateFile>,
     val backgroundZoom: Float = 1f,
+    val layers: List<SceneLayerConfig> = emptyList(),
+    val emitters: List<ParticleEmitterConfig> = emptyList(),
 )
 
 /**
@@ -64,6 +66,8 @@ object Templates {
                 left = left,
                 right = right,
                 backgroundZoom = parseBackgroundZoom(json),
+                layers = SceneJson.parseLayers(json),
+                emitters = SceneJson.parseEmitters(json),
             )
         } catch (_: Exception) {
             null
@@ -104,6 +108,8 @@ object Templates {
                 left = left,
                 right = right,
                 backgroundZoom = parseBackgroundZoom(json),
+                layers = SceneJson.parseLayers(json),
+                emitters = SceneJson.parseEmitters(json),
             )
         } catch (_: Exception) {
             null
@@ -206,6 +212,8 @@ object Templates {
             name = def.name,
             wallpaperAsset = "$TEMPLATES_DIR/${def.id}/${def.wallpaper}",
             portraits = portraits,
+            layers = def.layers.map { it.copy(path = "$TEMPLATES_DIR/${def.id}/${it.path}", isRemote = false) },
+            emitters = def.emitters.map { it.copy(path = "$TEMPLATES_DIR/${def.id}/${it.path}", isRemote = false) },
         )
     }
 
@@ -243,6 +251,8 @@ object Templates {
             wallpaperAsset = File(templateDir, def.wallpaper).absolutePath,
             portraits = portraits,
             isRemote = true,
+            layers = def.layers.map { it.copy(path = File(templateDir, it.path).absolutePath, isRemote = true) },
+            emitters = def.emitters.map { it.copy(path = File(templateDir, it.path).absolutePath, isRemote = true) },
         )
     }
 

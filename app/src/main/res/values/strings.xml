@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">FloatDeck</string>
+    <string name="app_name">FloatDeck Layers</string>
     <string name="wallpaper_description">Parallax wallpaper with floating character portraits</string>
     <string name="set_as_live_wallpaper">Set as Live Wallpaper</string>
     <string name="template_title">Template</string>

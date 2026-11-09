@@ -52,4 +52,85 @@ data class TemplateConfig(
     val portraits: List<PortraitConfig>,
     val isRemote: Boolean = false,
     val effect: PortraitEffect = PortraitEffect.NONE,
+    val layers: List<SceneLayerConfig> = emptyList(),
+    val emitters: List<ParticleEmitterConfig> = emptyList(),
+)
+
+/**
+ * Idle motion for a scene layer. Amplitudes are fractions of the wallpaper image
+ * (x of its width, y of its height); [period] is in seconds.
+ *
+ * @param bounce when true the vertical motion is a gallop-style hop (|sin|) instead of a smooth bob
+ */
+data class LayerSway(
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val period: Float = 6f,
+    val phase: Float = 0f,
+    val bounce: Boolean = false,
+)
+
+/**
+ * One extra image layer drawn between the wallpaper and the portrait cards.
+ *
+ * @param path absolute file path (imported templates) or asset path
+ * @param rect where the layer sits on the wallpaper image, normalized [x0, y0, x1, y1]
+ * @param depth parallax multiplier relative to the wallpaper (1 = moves with it, >1 = closer)
+ * @param driftX horizontal texture scroll in layer widths per second (wraps; texture must tile)
+ * @param driftY vertical texture scroll in layer heights per second (wraps; texture must tile)
+ * @param pulseAmount 0..1 opacity breathing depth; [pulsePeriod] in seconds
+ * @param opaque the layer fully covers the wallpaper, so the wallpaper itself is not drawn
+ */
+data class SceneLayerConfig(
+    val id: String,
+    val path: String,
+    val isRemote: Boolean,
+    val rect: FloatArray = floatArrayOf(0f, 0f, 1f, 1f),
+    val depth: Float = 1f,
+    val alpha: Float = 1f,
+    val sway: LayerSway? = null,
+    val driftX: Float = 0f,
+    val driftY: Float = 0f,
+    val pulseAmount: Float = 0f,
+    val pulsePeriod: Float = 8f,
+    val additive: Boolean = false,
+    val opaque: Boolean = false,
+)
+
+/**
+ * A sprite particle emitter (dust, sparks, motes). Positions are normalized to the
+ * wallpaper image; sizes and velocities are in wallpaper-image widths (per second).
+ *
+ * @param follow id of a scene layer whose parallax depth the particles share
+ * @param burstPeriod when > 0, emits [burstCount] particles every [burstPeriod] seconds
+ * @param gravity vertical acceleration (negative rises)
+ * @param drag exponential velocity damping per second
+ */
+data class ParticleEmitterConfig(
+    val path: String,
+    val isRemote: Boolean,
+    val follow: String? = null,
+    val depth: Float = 1f,
+    val area: FloatArray = floatArrayOf(0.4f, 0.4f, 0.6f, 0.6f),
+    val rate: Float = 0f,
+    val burstPeriod: Float = 0f,
+    val burstCount: Int = 0,
+    val burstPhase: Float = 0f,
+    val lifeMin: Float = 1f,
+    val lifeMax: Float = 2f,
+    val sizeMin: Float = 0.02f,
+    val sizeMax: Float = 0.04f,
+    val grow: Float = 1f,
+    val vxMin: Float = 0f,
+    val vxMax: Float = 0f,
+    val vyMin: Float = 0f,
+    val vyMax: Float = 0f,
+    val gravity: Float = 0f,
+    val drag: Float = 0f,
+    val alpha: Float = 1f,
+    val fadeIn: Float = 0.15f,
+    val spinMin: Float = 0f,
+    val spinMax: Float = 0f,
+    val additive: Boolean = false,
+    val maxParticles: Int = 160,
 )

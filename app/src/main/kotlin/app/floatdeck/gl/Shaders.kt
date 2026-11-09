@@ -182,6 +182,8 @@ object Shaders {
 
         uniform mat4 uMVP;
         uniform vec2 uParallax;
+        // Texture scroll for drifting scene layers (fog); 0 for the wallpaper itself
+        uniform vec2 uUVOffset;
 
         layout(location = 0) in vec2 aPosition;
         layout(location = 1) in vec2 aUV;
@@ -190,7 +192,7 @@ object Shaders {
 
         void main() {
             gl_Position = uMVP * vec4(aPosition, 0.0, 1.0);
-            vUV = aUV;
+            vUV = aUV + uUVOffset;
         }
         """.trimIndent()
 

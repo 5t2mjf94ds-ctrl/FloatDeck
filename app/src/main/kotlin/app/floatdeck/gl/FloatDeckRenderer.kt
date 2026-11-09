@@ -157,6 +157,13 @@ class FloatDeckRenderer(
     private var uniformBackgroundParallax = 0
     private var uniformBackgroundTexture = 0
     private var uniformBackgroundAlpha = 0
+    private var uniformBackgroundUvOffset = 0
+
+    // ------------------------------------------------------------------
+    // Scene layers (cut-out depth layers, drifting fog) and particles
+    // ------------------------------------------------------------------
+    private val scene = SceneRenderer()
+    private var spriteProgram: SpriteProgram? = null
 
     // ------------------------------------------------------------------
     // 布局常量
@@ -247,6 +254,15 @@ class FloatDeckRenderer(
         uniformBackgroundParallax = GLES30.glGetUniformLocation(backgroundProgram, "uParallax")
         uniformBackgroundTexture = GLES30.glGetUniformLocation(backgroundProgram, "uTexture")
         uniformBackgroundAlpha = GLES30.glGetUniformLocation(backgroundProgram, "uAlpha")
+        uniformBackgroundUvOffset = GLES30.glGetUniformLocation(backgroundProgram, "uUVOffset")
+        spriteProgram =
+            SpriteProgram(
+                program = backgroundProgram,
+                mvp = uniformBackgroundMvp,
+                texture = uniformBackgroundTexture,
+                alpha = uniformBackgroundAlpha,
+                uvOffset = uniformBackgroundUvOffset,
+            )
 
         quadVertexBuffer = Quad.createBuffer()
     }
@@ -332,6 +348,10 @@ class FloatDeckRenderer(
                 )
             }
         }
+
+        scene.load(template.layers, template.emitters) { path, isRemote ->
+            if (isRemote) loadTextureFromPath(path) else loadFullResTexture(path)
+        }
     }
 
     private fun loadTextureFromPath(path: String): Triple<Int, Int, Int>? {
@@ -391,6 +411,7 @@ class FloatDeckRenderer(
 
         swayTimeSeconds += frameDeltaSeconds
         updateInertia()
+        scene.update(frameDeltaSeconds, wallpaperPixelWidth.toFloat(), wallpaperPixelHeight.toFloat())
 
         // 横竖屏切换时重新加载模板
         if (needsTemplateReload) {
@@ -497,11 +518,23 @@ class FloatDeckRenderer(
                 abs(parallaxX),
                 abs(parallaxY),
             ) * 1.05f
-        // 额外 overscan 比例，确保视差偏移后不出现黑边
-        val overscan = 1f + (maxParallaxOffset / minOf(screenWidthPixels, screenHeightPixels)) * 2f
-
         val screenAspect = screenWidthPixels / screenHeightPixels
         val textureAspect = wallpaperPixelWidth.toFloat() / wallpaperPixelHeight.toFloat()
+        // 额外 overscan 比例，确保视差偏移后不出现黑边
+        val overscan =
+            if (scene.isEmpty) {
+                1f + (maxParallaxOffset / minOf(screenWidthPixels, screenHeightPixels)) * 2f
+            } else {
+                sceneOverscan(
+                    parallaxX,
+                    parallaxY,
+                    scene.maxDepth,
+                    screenWidthPixels,
+                    screenHeightPixels,
+                    textureAspect,
+                )
+            }
+
         val scaleFactor =
             if (screenAspect > textureAspect) {
                 screenWidthPixels * overscan / wallpaperPixelWidth.toFloat()
@@ -529,6 +562,7 @@ class FloatDeckRenderer(
 
         GLES30.glUniformMatrix4fv(uniformBackgroundMvp, 1, false, mvp, 0)
         GLES30.glUniform2f(uniformBackgroundParallax, 0f, 0f)
+        GLES30.glUniform2f(uniformBackgroundUvOffset, 0f, 0f)
         if (uniformBackgroundAlpha != 0) {
             GLES30.glUniform1f(uniformBackgroundAlpha, alpha)
         }
@@ -537,8 +571,32 @@ class FloatDeckRenderer(
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, wallpaperTextureId)
         GLES30.glUniform1i(uniformBackgroundTexture, 0)
 
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        // An opaque base layer replaces the wallpaper (the wallpaper still provides
+        // the gallery thumbnail and the fallback look in stock FloatDeck)
+        if (!scene.hasOpaqueBase) {
+            GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        }
         unbindQuadAttributes()
+
+        val sprite = spriteProgram
+        if (sprite != null && !scene.isEmpty) {
+            scene.draw(
+                SceneFrame(
+                    centerX = screenWidthPixels / 2f,
+                    centerY = screenHeightPixels / 2f,
+                    drawWidth = zoomed[0],
+                    drawHeight = zoomed[1],
+                    parallaxX = parallaxX,
+                    parallaxY = parallaxY,
+                    imageWidth = wallpaperPixelWidth.toFloat(),
+                    imageHeight = wallpaperPixelHeight.toFloat(),
+                    swayScale = swayAmplitude,
+                ),
+                sprite,
+                orthographicMatrix,
+                buffer,
+            )
+        }
     }
 
     // ==================================================================
@@ -745,6 +803,7 @@ class FloatDeckRenderer(
         portraitStates.forEach { TextureLoader.deleteTexture(it.textureId) }
         portraitStates.clear()
         if (wallpaperTextureId != 0) TextureLoader.deleteTexture(wallpaperTextureId)
+        scene.release()
         if (portraitProgram != 0) GLES30.glDeleteProgram(portraitProgram)
         if (backgroundProgram != 0) GLES30.glDeleteProgram(backgroundProgram)
     }
@@ -916,6 +975,27 @@ class FloatDeckRenderer(
                 clampedPitch * screenWidth * xMultiplier,
                 clampedRoll * screenHeight * yMultiplier,
             )
+        }
+
+        /**
+         * Overscan for layered templates: per axis, the cover-fitted image must still reach
+         * every screen edge after the deepest layer moves by offset × depth. The cover fit
+         * often already leaves slack on one axis, so this zooms far less than a uniform margin.
+         */
+        internal fun sceneOverscan(
+            parallaxX: Float,
+            parallaxY: Float,
+            maxDepth: Float,
+            screenWidth: Float,
+            screenHeight: Float,
+            textureAspect: Float,
+        ): Float {
+            val screenAspect = screenWidth / screenHeight
+            val coverWidth = if (screenAspect > textureAspect) screenWidth else screenHeight * textureAspect
+            val coverHeight = if (screenAspect > textureAspect) screenWidth / textureAspect else screenHeight
+            val needX = (screenWidth + 2f * abs(parallaxX) * maxDepth * 1.05f) / coverWidth
+            val needY = (screenHeight + 2f * abs(parallaxY) * maxDepth * 1.05f) / coverHeight
+            return maxOf(1f, needX, needY)
         }
 
         /**

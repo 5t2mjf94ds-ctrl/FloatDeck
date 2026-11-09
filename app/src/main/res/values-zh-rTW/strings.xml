@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">FloatDeck</string>
+    <string name="app_name">FloatDeck Layers</string>
     <string name="wallpaper_description">帶有浮動角色立繪的視差桌布</string>
     <string name="set_as_live_wallpaper">設為動態桌布</string>
     <string name="template_title">範本</string>

@@ -85,11 +85,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "app.floatdeck"
+        applicationId = "app.floatdeck.layers"
         minSdk = 26
         targetSdk = 36
         versionCode = 10
-        versionName = "0.5.2"
+        versionName = "0.5.2-layers"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
