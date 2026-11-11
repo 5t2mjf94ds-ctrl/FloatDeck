@@ -72,6 +72,33 @@ data class LayerSway(
 )
 
 /**
+ * Back-and-forth rotation of a scene layer around a pivot, like a leaf or a hanging olive
+ * moving in the wind. The swing mixes in a faster, smaller second wave so it never looks
+ * mechanical.
+ *
+ * @param angle swing amplitude in degrees
+ * @param period seconds per full swing
+ * @param phase radians; offset neighboring layers to make a wave travel along a branch
+ * @param pivotX pivot inside the layer's rect (0 = left edge, 1 = right edge)
+ * @param pivotY pivot inside the layer's rect (0 = top edge, 1 = bottom edge)
+ * @param scale optional size breathing around the same pivot, as a fraction (0.04 = ±4 %)
+ * @param droop how far (degrees) the layer leans toward real-world down when gravity pulls
+ *   straight across it; it eases into the lean as the device is tilted (0 = ignores gravity)
+ * @param dir direction the layer points from its pivot (e.g. pivot to leaf tip), in screen
+ *   degrees: 0 = right, 90 = down, 180 = left, -90 = up
+ */
+data class LayerRock(
+    val angle: Float = 0f,
+    val period: Float = 4f,
+    val phase: Float = 0f,
+    val pivotX: Float = 0.5f,
+    val pivotY: Float = 0.5f,
+    val scale: Float = 0f,
+    val droop: Float = 0f,
+    val dir: Float = 0f,
+)
+
+/**
  * One extra image layer drawn between the wallpaper and the portrait cards.
  *
  * @param path absolute file path (imported templates) or asset path
@@ -80,11 +107,16 @@ data class LayerSway(
  * @param driftX horizontal texture scroll in layer widths per second (wraps; texture must tile)
  * @param driftY vertical texture scroll in layer heights per second (wraps; texture must tile)
  * @param pulseAmount 0..1 opacity breathing depth; [pulsePeriod] in seconds
+ * @param pulsePhase radians; offset layers so a highlight travels across them
+ * @param pulseSharpness exponent on the breathing wave; higher values make short, sharp peaks
+ * @param pulseFlash when true the layer is mostly faded and lights up at the wave's peak
+ *   (a sweeping highlight) instead of mostly showing and dipping
  * @param opaque the layer fully covers the wallpaper, so the wallpaper itself is not drawn
  * @param contained the layer's content fades out before its edges, so it never has to cover
  *   the screen and does not force the wallpaper to zoom in when it moves
  * @param follow id of a parent layer whose idle sway is added to this layer's own
  * @param spinDegPerSec continuous rotation around the layer's center (clockwise on screen)
+ * @param rock optional back-and-forth swing around a pivot (leaves, hanging fruit)
  * @param frameCount number of animation frames in a sprite-sheet texture laid out as
  *   [frameCols] × [frameRows], left-to-right then top-to-bottom, played at [frameFps]
  */
@@ -100,6 +132,9 @@ data class SceneLayerConfig(
     val driftY: Float = 0f,
     val pulseAmount: Float = 0f,
     val pulsePeriod: Float = 8f,
+    val pulsePhase: Float = 0f,
+    val pulseSharpness: Float = 1f,
+    val pulseFlash: Boolean = false,
     val additive: Boolean = false,
     val opaque: Boolean = false,
     val contained: Boolean = false,
@@ -109,6 +144,7 @@ data class SceneLayerConfig(
     val frameRows: Int = 1,
     val frameCount: Int = 1,
     val frameFps: Float = 0f,
+    val rock: LayerRock? = null,
 )
 
 /**

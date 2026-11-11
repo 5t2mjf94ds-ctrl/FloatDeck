@@ -425,6 +425,8 @@ class FloatDeckRenderer(
         swayTimeSeconds += frameDeltaSeconds
         updateInertia()
         updateRestPose()
+        val (gravityX, gravityY) = screenGravity(smoothedPitchY, smoothedRollX)
+        scene.setGravity(gravityX, gravityY)
         scene.update(frameDeltaSeconds, wallpaperPixelWidth.toFloat(), wallpaperPixelHeight.toFloat())
 
         // 横竖屏切换时重新加载模板
@@ -986,6 +988,21 @@ class FloatDeckRenderer(
         // Upper bound for the user background zoom; the pan exists to fix
         // aspect-ratio framing, not to create a zoom effect
         internal const val MAX_BACKGROUND_ZOOM = 2f
+
+        /**
+         * Real-world down on the screen plane (x right, y down) from the absolute tilt readings:
+         * [pitch] is gravity across the screen (right edge dipping is positive) and [roll] is
+         * gravity through the screen. The in-plane part fades to zero as the device lies flat.
+         */
+        internal fun screenGravity(
+            pitch: Float,
+            roll: Float,
+        ): Pair<Float, Float> {
+            val x = pitch.coerceIn(-1f, 1f)
+            val z = roll.coerceIn(-1f, 1f)
+            val y = kotlin.math.sqrt((1f - x * x - z * z).coerceAtLeast(0f))
+            return Pair(x, y)
+        }
 
         /**
          * Computes the parallax offset in pixels: the sensor value is first

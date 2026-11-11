@@ -65,6 +65,21 @@ object SceneJson {
                     bounce = it.optBoolean("bounce", false),
                 )
             }
+        val rockObj = obj.optJSONObject("rock")
+        val rock =
+            rockObj?.let {
+                val pivot = it.optJSONArray("pivot")
+                LayerRock(
+                    angle = it.optFloat("angle", 0f).coerceIn(-90f, 90f),
+                    period = it.optFloat("period", 4f).coerceAtLeast(0.05f),
+                    phase = it.optFloat("phase", 0f),
+                    pivotX = (pivot?.optDouble(0, 0.5) ?: 0.5).toFloat(),
+                    pivotY = (pivot?.optDouble(1, 0.5) ?: 0.5).toFloat(),
+                    scale = it.optFloat("scale", 0f).coerceIn(-0.5f, 0.5f),
+                    droop = it.optFloat("droop", 0f).coerceIn(-45f, 45f),
+                    dir = it.optFloat("dir", 0f),
+                )
+            }
         val drift = obj.optJSONObject("drift")
         val pulse = obj.optJSONObject("pulse")
         val frames = obj.optJSONObject("frames")
@@ -82,6 +97,9 @@ object SceneJson {
             driftY = drift?.optFloat("y", 0f) ?: 0f,
             pulseAmount = (pulse?.optFloat("amount", 0f) ?: 0f).coerceIn(0f, 1f),
             pulsePeriod = (pulse?.optFloat("period", 8f) ?: 8f).coerceAtLeast(0.1f),
+            pulsePhase = pulse?.optFloat("phase", 0f) ?: 0f,
+            pulseSharpness = (pulse?.optFloat("sharpness", 1f) ?: 1f).coerceIn(0.1f, 64f),
+            pulseFlash = pulse?.optBoolean("flash", false) ?: false,
             additive = obj.optBoolean("additive", false),
             opaque = obj.optBoolean("opaque", false),
             contained = obj.optBoolean("contained", false),
@@ -91,6 +109,7 @@ object SceneJson {
             frameRows = rows,
             frameCount = (frames?.optInt("count", cols * rows) ?: 1).coerceIn(1, cols * rows),
             frameFps = (frames?.optFloat("fps", 0f) ?: 0f).coerceIn(0f, 120f),
+            rock = rock,
         )
     }
 

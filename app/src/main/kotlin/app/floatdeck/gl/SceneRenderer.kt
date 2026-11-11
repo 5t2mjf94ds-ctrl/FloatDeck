@@ -2,13 +2,16 @@ package app.floatdeck.gl
 
 import android.opengl.GLES30
 import android.opengl.Matrix
+import app.floatdeck.data.LayerRock
 import app.floatdeck.data.ParticleEmitterConfig
 import app.floatdeck.data.SceneLayerConfig
 import java.nio.FloatBuffer
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -75,6 +78,14 @@ class SceneRenderer {
     private val layers = mutableListOf<LayerState>()
     private val emitters = mutableListOf<Emitter>()
     private var timeSeconds = 0.0
+
+    // Real-world down on the screen plane (x right, y down), eased so drooping layers lean
+    // smoothly instead of snapping or swinging
+    private var gravityTargetX = 0f
+    private var gravityTargetY = 1f
+    private var gravityX = 0f
+    private var gravityY = 1f
+    private var gravityReady = false
     private val random = Random(System.nanoTime())
 
     private val model = FloatArray(16)
@@ -126,6 +137,23 @@ class SceneRenderer {
         emitters.clear()
     }
 
+    /**
+     * Where real-world down points on the screen plane (x right, y down). Length is the share of
+     * gravity lying in the screen plane: about 1 when held upright, about 0 when lying flat.
+     */
+    fun setGravity(
+        x: Float,
+        y: Float,
+    ) {
+        gravityTargetX = x
+        gravityTargetY = y
+        if (!gravityReady) {
+            gravityX = x
+            gravityY = y
+            gravityReady = true
+        }
+    }
+
     /** Advances time and particle simulation; image size converts emitter units to wallpaper pixels. */
     fun update(
         deltaSeconds: Float,
@@ -133,6 +161,9 @@ class SceneRenderer {
         imageHeight: Float,
     ) {
         timeSeconds += deltaSeconds
+        val k = 1f - exp(-deltaSeconds / GRAVITY_LAG_SECONDS)
+        gravityX += (gravityTargetX - gravityX) * k
+        gravityY += (gravityTargetY - gravityY) * k
         emitters.forEach { stepEmitter(it, deltaSeconds, imageWidth, imageHeight) }
     }
 
@@ -181,8 +212,7 @@ class SceneRenderer {
         val cfg = layer.config
         var alpha = cfg.alpha
         if (cfg.pulseAmount > 0f) {
-            val wave = 0.5f + 0.5f * sin((2.0 * PI * timeSeconds / cfg.pulsePeriod)).toFloat()
-            alpha *= 1f - cfg.pulseAmount * wave
+            alpha *= pulseFactor(cfg, timeSeconds)
         }
         if (alpha <= 0.001f) return
 
@@ -204,6 +234,18 @@ class SceneRenderer {
 
         Matrix.setIdentityM(model, 0)
         Matrix.translateM(model, 0, cx, cy, 0f)
+        cfg.rock?.let { rock ->
+            val (angle, grow) = rockAt(rock, timeSeconds, frame.swayScale, gravityX, gravityY)
+            if (angle != 0f || grow != 1f) {
+                // swing around the pivot instead of the layer's center
+                val dx = (rock.pivotX - 0.5f) * 2f * halfW
+                val dy = (rock.pivotY - 0.5f) * 2f * halfH
+                Matrix.translateM(model, 0, dx, dy, 0f)
+                Matrix.rotateM(model, 0, angle, 0f, 0f, 1f)
+                Matrix.scaleM(model, 0, grow, grow, 1f)
+                Matrix.translateM(model, 0, -dx, -dy, 0f)
+            }
+        }
         if (cfg.spinDegPerSec != 0f) {
             val angle = ((cfg.spinDegPerSec * timeSeconds) % 360.0).toFloat()
             Matrix.rotateM(model, 0, angle, 0f, 0f, 1f)
@@ -407,6 +449,53 @@ class SceneRenderer {
     ): Float = if (b <= a) a else a + random.nextFloat() * (b - a)
 
     companion object {
+        /**
+         * Opacity multiplier of a pulsing layer at [time] seconds. Normal layers dip by up to
+         * the pulse amount; flash layers stay faded and light up briefly at the wave's peak.
+         */
+        internal fun pulseFactor(
+            cfg: SceneLayerConfig,
+            time: Double,
+        ): Float {
+            val raw = 0.5 + 0.5 * sin(2.0 * PI * time / cfg.pulsePeriod + cfg.pulsePhase)
+            val wave = raw.pow(cfg.pulseSharpness.toDouble()).toFloat()
+            return if (cfg.pulseFlash) {
+                1f - cfg.pulseAmount * (1f - wave)
+            } else {
+                1f - cfg.pulseAmount * wave
+            }
+        }
+
+        /** Seconds for drooping layers to settle into a new lean after the device is tilted. */
+        internal const val GRAVITY_LAG_SECONDS = 0.45f
+
+        /**
+         * Swing angle (degrees) and size factor of a rocking layer at [time] seconds, scaled by
+         * the user's sway amplitude. A smaller, faster second wave keeps the motion organic.
+         * Layers with a droop also lean toward real-world down ([gravityX], [gravityY] on the
+         * screen plane): the pull is strongest across the layer and zero along it.
+         */
+        internal fun rockAt(
+            rock: LayerRock,
+            time: Double,
+            swayScale: Float,
+            gravityX: Float = 0f,
+            gravityY: Float = 1f,
+        ): Pair<Float, Float> {
+            if (swayScale <= 0f) return Pair(0f, 1f)
+            val phase = 2.0 * PI * time / rock.period + rock.phase
+            val swing = 0.8 * sin(phase) + 0.2 * sin(2.37 * phase + 1.3)
+            var angle = (rock.angle * swing * swayScale).toFloat()
+            if (rock.droop != 0f) {
+                val rad = rock.dir * (PI.toFloat() / 180f)
+                // cross(direction, gravity): positive turns the tip clockwise, toward down
+                val pull = cos(rad) * gravityY - sin(rad) * gravityX
+                angle += rock.droop * pull * swayScale
+            }
+            val grow = 1f + (rock.scale * sin(phase - 0.8) * swayScale).toFloat()
+            return Pair(angle, grow)
+        }
+
         /** Keeps a scroll offset in [0, 1) so float precision holds over long uptimes. */
         internal fun wrapOffset(value: Double): Float {
             val f = value - floor(value)

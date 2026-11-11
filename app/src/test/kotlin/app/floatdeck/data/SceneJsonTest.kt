@@ -129,6 +129,36 @@ class SceneJsonTest {
     }
 
     @Test
+    fun `rock and pulse wave fields are parsed`() {
+        val json =
+            JSONObject(
+                """
+                {"layers":[{"file":"leaf.png","rock":{"angle":6,"period":3.5,"phase":1.2,"pivot":[0.1,0.9],"scale":0.03,"droop":7,"dir":-120},
+                  "pulse":{"amount":1,"period":6,"phase":2.5,"sharpness":5,"flash":true}},
+                 {"file":"plain.png"}]}
+                """.trimIndent(),
+            )
+        val layers = SceneJson.parseLayers(json)
+        val rock = layers[0].rock!!
+        assertEquals(6f, rock.angle, 0.0001f)
+        assertEquals(3.5f, rock.period, 0.0001f)
+        assertEquals(1.2f, rock.phase, 0.0001f)
+        assertEquals(0.1f, rock.pivotX, 0.0001f)
+        assertEquals(0.9f, rock.pivotY, 0.0001f)
+        assertEquals(0.03f, rock.scale, 0.0001f)
+        assertEquals(7f, rock.droop, 0.0001f)
+        assertEquals(-120f, rock.dir, 0.0001f)
+        assertEquals(2.5f, layers[0].pulsePhase, 0.0001f)
+        assertEquals(5f, layers[0].pulseSharpness, 0.0001f)
+        assertTrue(layers[0].pulseFlash)
+        val plain = layers[1]
+        assertNull(plain.rock)
+        assertEquals(0f, plain.pulsePhase, 0.0001f)
+        assertEquals(1f, plain.pulseSharpness, 0.0001f)
+        assertFalse(plain.pulseFlash)
+    }
+
+    @Test
     fun `safe file names`() {
         assertTrue(SceneJson.isSafeFileName("gyro_ride-2.webp"))
         assertFalse(SceneJson.isSafeFileName("../a.webp"))
