@@ -117,4 +117,10 @@
     <string name="help_and_about">Help &amp; about</string>
     <string name="wallpaper_settings_title">Wallpaper settings</string>
     <string name="select_template_hint">Pick a template first to adjust wallpaper behavior</string>
+    <string name="apply_title">Apply this theme to</string>
+    <string name="screen_home">Home screen</string>
+    <string name="screen_lock">Lock screen</string>
+    <string name="screen_both">Home and lock screens</string>
+    <string name="apply_done">Applied to %1$s</string>
+    <string name="apply_pick_hint">On the next screen, choose \"%1$s\" when you set the wallpaper</string>
 </resources>

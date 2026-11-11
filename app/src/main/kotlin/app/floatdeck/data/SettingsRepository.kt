@@ -66,6 +66,23 @@ class SettingsRepository(
             .apply()
     }
 
+    /** Writes home/lock screen theme slots right away, so a wallpaper starting next reads them. */
+    fun writeScreenSlots(writes: Map<String, String>) {
+        val editor = context.getSharedPreferences(ScreenSlots.PREFS_NAME, Context.MODE_PRIVATE).edit()
+        writes.forEach { (key, id) -> editor.putString(key, id) }
+        editor.commit()
+    }
+
+    /** Forgets any home/lock screen slot that shows [id] (the template was deleted). */
+    fun clearScreenSlotsFor(id: String) {
+        val prefs = context.getSharedPreferences(ScreenSlots.PREFS_NAME, Context.MODE_PRIVATE)
+        val editor = prefs.edit()
+        listOf(ScreenSlots.KEY_HOME, ScreenSlots.KEY_LOCK).forEach { key ->
+            if (prefs.getString(key, null) == id) editor.remove(key)
+        }
+        editor.apply()
+    }
+
     /** 保存立绘特效。 */
     suspend fun setPortraitEffect(effect: PortraitEffect) {
         context.dataStore.edit { it[KEY_PORTRAIT_EFFECT] = effect.key }

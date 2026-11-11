@@ -1,17 +1,20 @@
 package app.floatdeck.service
 
 import android.app.KeyguardManager
+import android.app.wallpaper.WallpaperDescription
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.os.Build
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.MotionEvent
 import android.view.SurfaceHolder
 import androidx.core.content.ContextCompat
 import app.floatdeck.data.RemoteTemplateLoader
+import app.floatdeck.data.ScreenSlots
 import app.floatdeck.data.TemplateDef
 import app.floatdeck.data.Templates
 import app.floatdeck.gl.FloatDeckRenderer
@@ -23,8 +26,7 @@ import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.egl.EGLDisplay
 
 private const val TAG = "FloatDeckWallpaper"
-private const val PREFS_NAME = "settings_prefs"
-private const val KEY_TEMPLATE_ID = "template_id"
+private const val PREFS_NAME = ScreenSlots.PREFS_NAME
 private const val KEY_PORTRAIT_EFFECT = "portrait_effect"
 private const val KEY_DRAG_ENABLED = "drag_enabled"
 private const val KEY_FRAME_RATE_MODE = "frame_rate_mode"
@@ -49,13 +51,56 @@ class FloatDeckWallpaperService : WallpaperService() {
         private var glThread: GLWallpaperThread? = null
 
         /**
+         * Preference key holding the theme this wallpaper shows: the app's selection for a
+         * preview, otherwise the home or lock screen slot (see [ScreenSlots]).
+         */
+        @Volatile
+        private var templateKey = ScreenSlots.KEY_SELECTED
+
+        /** Screens this engine draws on (WallpaperManager flags); Android 14+ reports it. */
+        private fun currentFlags(): Int =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                wallpaperFlags
+            } else {
+                ScreenSlots.FLAG_BOTH
+            }
+
+        /** Points this engine at its screen's theme slot, reloading if that changes. */
+        private fun updateScreenSlot(flags: Int) {
+            if (!isPreview) ScreenSlots.register(this, flags)
+            val key = ScreenSlots.keyFor(flags, isPreview)
+            if (key != templateKey) {
+                templateKey = key
+                glThread?.let {
+                    it.templateKey = key
+                    it.requestReload()
+                }
+            }
+        }
+
+        /** The theme this engine should show now (an empty slot falls back to the selection). */
+        private fun effectiveTemplateId(prefs: SharedPreferences): String {
+            val selected = prefs.getString(ScreenSlots.KEY_SELECTED, "") ?: ""
+            if (templateKey == ScreenSlots.KEY_SELECTED) return selected
+            return (prefs.getString(templateKey, "") ?: "").ifBlank { selected }
+        }
+
+        /**
          * Watches preference changes (template/effect) and tells the running
          * GL thread to hot-reload. Held as a strong field so SharedPreferences'
          * internal weak reference cannot get it GC'd.
          */
         private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
             when (key) {
-                KEY_TEMPLATE_ID, KEY_PORTRAIT_EFFECT -> glThread?.requestReload()
+                KEY_PORTRAIT_EFFECT -> glThread?.requestReload()
+                // Only reload when this screen's own theme actually changed, so picking a
+                // theme in the app (or applying it to the other screen) leaves this one alone
+                ScreenSlots.KEY_SELECTED, ScreenSlots.KEY_HOME, ScreenSlots.KEY_LOCK -> {
+                    val thread = glThread
+                    if (thread != null && effectiveTemplateId(prefs) != thread.loadedTemplateId) {
+                        thread.requestReload()
+                    }
+                }
                 KEY_DRAG_ENABLED -> {
                     val enabled = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                         .getBoolean(KEY_DRAG_ENABLED, true)
@@ -117,6 +162,7 @@ class FloatDeckWallpaperService : WallpaperService() {
         override fun onCreate(surfaceHolder: SurfaceHolder) {
             super.onCreate(surfaceHolder)
             setTouchEventsEnabled(true)
+            updateScreenSlot(currentFlags())
 
             // 根据当前锁屏状态初始化过渡进度（避免从默认状态跳变）
             val km = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
@@ -144,7 +190,31 @@ class FloatDeckWallpaperService : WallpaperService() {
             sensorHandler.register()
         }
 
+        override fun onWallpaperFlagsChanged(which: Int) {
+            super.onWallpaperFlagsChanged(which)
+            updateScreenSlot(which)
+        }
+
+        /**
+         * Android 16+: the system picker is applying this preview to the home screen, the lock
+         * screen or both. Remember the previewed theme for exactly those screens, before the
+         * real wallpaper for them starts.
+         */
+        override fun onApplyWallpaper(which: Int): WallpaperDescription? {
+            if (isPreview) {
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val selected = prefs.getString(ScreenSlots.KEY_SELECTED, "") ?: ""
+                if (selected.isNotBlank()) {
+                    val editor = prefs.edit()
+                    ScreenSlots.keysForFlags(which).forEach { editor.putString(it, selected) }
+                    editor.commit()
+                }
+            }
+            return super.onApplyWallpaper(which)
+        }
+
         override fun onDestroy() {
+            ScreenSlots.unregister(this)
             unregisterReceiver(lockReceiver)
             getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .unregisterOnSharedPreferenceChangeListener(prefsListener)
@@ -229,7 +299,10 @@ class FloatDeckWallpaperService : WallpaperService() {
                     renderer,
                     sensorHandler,
                     applicationContext,
-                ).apply { start() }
+                ).apply {
+                    templateKey = this@FloatDeckEngine.templateKey
+                    start()
+                }
         }
 
         private fun stopGLThread() {
@@ -275,6 +348,15 @@ class GLWallpaperThread(
     /** 由外部（设置变更）置位，渲染循环检测到后重新加载模板/特效。 */
     @Volatile
     private var reloadRequested = true
+
+    /** Preference key holding the theme to show (set by the engine; see [ScreenSlots]). */
+    @Volatile
+    var templateKey: String = ScreenSlots.KEY_SELECTED
+
+    /** Theme id loaded last, so preference changes only reload when it really changes. */
+    @Volatile
+    var loadedTemplateId: String? = null
+        private set
 
     // ------------------------------------------------------------------
     // Surface lifecycle (notified by the Engine thread, handled here):
@@ -644,9 +726,24 @@ class GLWallpaperThread(
         return true
     }
 
+    /**
+     * Theme for this wallpaper's screen. The first time a screen has no slot yet (e.g. right
+     * after updating), it keeps the selected theme and pins it, so later picks in the app only
+     * change a screen once they are applied to it.
+     */
+    private fun resolveTemplateId(prefs: SharedPreferences): String {
+        val selected = prefs.getString(ScreenSlots.KEY_SELECTED, "") ?: ""
+        if (templateKey == ScreenSlots.KEY_SELECTED) return selected
+        val slot = prefs.getString(templateKey, "") ?: ""
+        if (slot.isNotBlank()) return slot
+        if (selected.isNotBlank()) prefs.edit().putString(templateKey, selected).apply()
+        return selected
+    }
+
     /** 从设置读取模板 id 与特效并加载到渲染器。 */
     private fun loadConfigFromPrefs(prefs: SharedPreferences) {
-        val savedId = prefs.getString(KEY_TEMPLATE_ID, "") ?: ""
+        val savedId = resolveTemplateId(prefs)
+        loadedTemplateId = savedId
         val effectStr = prefs.getString(KEY_PORTRAIT_EFFECT, "none") ?: "none"
         renderer.portraitEffect =
             when (effectStr) {

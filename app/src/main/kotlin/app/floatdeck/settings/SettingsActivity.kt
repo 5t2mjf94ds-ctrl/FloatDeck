@@ -88,6 +88,7 @@ import app.floatdeck.R
 import app.floatdeck.data.PortraitEffect
 import app.floatdeck.data.RemoteTemplateLoader
 import app.floatdeck.data.RemoteTemplateLoader.HttpProtocolException
+import app.floatdeck.data.ScreenSlots
 import app.floatdeck.data.SettingsRepository
 import app.floatdeck.data.TemplateLoadException
 import app.floatdeck.data.UpdateChecker
@@ -113,10 +114,46 @@ class SettingsActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     SettingsScreen(
                         repo = repo,
-                        onSetWallpaper = { setAsWallpaper() },
+                        onSetWallpaper = { target -> applyTo(target, repo) },
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Applies the selected theme to the home screen, the lock screen or both. When FloatDeck
+     * already runs on the chosen screen(s) the change shows right away; otherwise the system
+     * picker opens, with a hint to choose the same screen there.
+     */
+    private fun applyTo(
+        target: ScreenSlots.Target,
+        repo: SettingsRepository,
+    ) {
+        val prefs = getSharedPreferences(ScreenSlots.PREFS_NAME, Context.MODE_PRIVATE)
+        val selected = prefs.getString(ScreenSlots.KEY_SELECTED, "") ?: ""
+        if (selected.isBlank()) return
+        val plan =
+            ScreenSlots.plan(
+                target = target,
+                templateId = selected,
+                active = ScreenSlots.activeFlags(),
+                currentHome = prefs.getString(ScreenSlots.KEY_HOME, "") ?: "",
+            )
+        repo.writeScreenSlots(plan.writes)
+        val where =
+            getString(
+                when (target) {
+                    ScreenSlots.Target.HOME -> R.string.screen_home
+                    ScreenSlots.Target.LOCK -> R.string.screen_lock
+                    ScreenSlots.Target.BOTH -> R.string.screen_both
+                },
+            )
+        if (plan.needsPicker) {
+            Toast.makeText(this, getString(R.string.apply_pick_hint, where), Toast.LENGTH_LONG).show()
+            setAsWallpaper()
+        } else {
+            Toast.makeText(this, getString(R.string.apply_done, where), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -180,9 +217,10 @@ private fun loadAllTemplates(
 @Composable
 fun SettingsScreen(
     repo: SettingsRepository,
-    onSetWallpaper: () -> Unit,
+    onSetWallpaper: (ScreenSlots.Target) -> Unit,
 ) {
     val context = LocalContext.current
+    var showApplyDialog by rememberSaveable { mutableStateOf(false) }
     var templateId by remember { mutableStateOf("") }
     var selectedEffect by remember { mutableStateOf(PortraitEffect.NONE) }
     var dragEnabled by remember { mutableStateOf(true) }
@@ -378,6 +416,7 @@ fun SettingsScreen(
         if (templateId == item.id) {
             scope.launch { repo.setTemplate("") }
         }
+        repo.clearScreenSlotsFor(item.id)
         pendingDelete = null
     }
 
@@ -446,7 +485,7 @@ fun SettingsScreen(
         bottomBar = {
             PrimaryCtaBar(
                 enabled = templateId.isNotBlank(),
-                onClick = onSetWallpaper,
+                onClick = { showApplyDialog = true },
             )
         },
     ) { padding ->
@@ -679,6 +718,17 @@ fun SettingsScreen(
     }
 
     // ---- Dialogs ----
+
+    if (showApplyDialog) {
+        ApplyTargetDialog(
+            themeName = selectedName,
+            onPick = { target ->
+                showApplyDialog = false
+                onSetWallpaper(target)
+            },
+            onDismiss = { showApplyDialog = false },
+        )
+    }
 
     DeleteTemplateDialog(
         template = pendingDelete,
@@ -935,6 +985,49 @@ fun SettingsScreen(
             },
         )
     }
+}
+
+/** Asks where the selected theme should go: home screen, lock screen or both. */
+@Composable
+private fun ApplyTargetDialog(
+    themeName: String?,
+    onPick: (ScreenSlots.Target) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.apply_title)) },
+        text = {
+            Column {
+                themeName?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                listOf(
+                    ScreenSlots.Target.HOME to R.string.screen_home,
+                    ScreenSlots.Target.LOCK to R.string.screen_lock,
+                    ScreenSlots.Target.BOTH to R.string.screen_both,
+                ).forEach { (target, label) ->
+                    TextButton(
+                        onClick = { onPick(target) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(label), style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
 }
 
 /** Template gallery: card carousel on narrow screens, two-column grid on wide ones. */
